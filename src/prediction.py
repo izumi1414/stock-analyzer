@@ -28,6 +28,12 @@ class PredictionResult:
     next_close_prediction: float
 
 
+@dataclass
+class BacktestResult:
+    results: pd.DataFrame
+    metrics: dict[str, float]
+
+
 def prepare_prediction_data(stock_data: pd.DataFrame) -> pd.DataFrame:
     """Create prediction features and the next-day Close target."""
     data = stock_data.copy()
@@ -80,3 +86,62 @@ def train_and_evaluate(stock_data: pd.DataFrame) -> PredictionResult:
         predicted_values=predicted_values,
         next_close_prediction=next_close_prediction,
     )
+
+
+def run_backtest(
+    stock_data: pd.DataFrame,
+    start_date: pd.Timestamp,
+    end_date: pd.Timestamp,
+) -> BacktestResult:
+    """Run expanding-window next-day predictions without using future data."""
+    prediction_data = prepare_prediction_data(stock_data)
+    prediction_data = prediction_data.sort_index()
+    prediction_data = prediction_data.loc[
+        (prediction_data.index >= start_date) & (prediction_data.index <= end_date)
+    ]
+
+    full_prediction_data = prepare_prediction_data(stock_data).sort_index()
+    predictions = []
+    for prediction_date, row in prediction_data.iterrows():
+        training_data = full_prediction_data.loc[full_prediction_data.index < prediction_date]
+        if len(training_data) < 10:
+            continue
+
+        model = LinearRegression()
+        model.fit(training_data[FEATURE_COLUMNS], training_data["Target"])
+        predicted_value = float(model.predict(row[FEATURE_COLUMNS].to_frame().T)[0])
+        actual_value = float(row["Target"])
+        previous_close = float(row["Close"])
+        predictions.append(
+            {
+                "date": prediction_date,
+                "predicted_value": predicted_value,
+                "actual_value": actual_value,
+                "prediction_error": predicted_value - actual_value,
+                "predicted_direction": "Up" if predicted_value >= previous_close else "Down",
+                "actual_direction": "Up" if actual_value >= previous_close else "Down",
+            }
+        )
+
+    results = pd.DataFrame(
+        predictions,
+        columns=[
+            "date",
+            "predicted_value",
+            "actual_value",
+            "prediction_error",
+            "predicted_direction",
+            "actual_direction",
+        ],
+    )
+    if results.empty:
+        raise ValueError("バックテストに必要なデータが不足しています。")
+
+    metrics = {
+        "MAE": mean_absolute_error(results["actual_value"], results["predicted_value"]),
+        "RMSE": mean_squared_error(results["actual_value"], results["predicted_value"]) ** 0.5,
+        "Directional Accuracy": (
+            results["predicted_direction"] == results["actual_direction"]
+        ).mean(),
+    }
+    return BacktestResult(results=results, metrics=metrics)
