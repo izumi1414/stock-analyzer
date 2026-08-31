@@ -1,6 +1,22 @@
 import plotly.express as px
+import pandas as pd
 import streamlit as st
+from pytrends.request import TrendReq
 import yfinance as yf
+
+
+def get_google_trends(keyword: str, timeframe: str) -> pd.DataFrame:
+	trends = TrendReq(hl="ja-JP", tz=540)
+	trends.build_payload([keyword], timeframe=timeframe, geo="JP")
+	trend_data = trends.interest_over_time().reset_index()
+
+	if trend_data.empty:
+		return pd.DataFrame(columns=["date", "search_index"])
+
+	trend_data = trend_data.rename(columns={"date": "date", keyword: "search_index"})
+	trend_data["date"] = pd.to_datetime(trend_data["date"])
+	trend_data["search_index"] = pd.to_numeric(trend_data["search_index"], errors="coerce")
+	return trend_data[["date", "search_index"]].dropna()
 
 
 stocks = {
@@ -73,3 +89,30 @@ else:
 		)
 		figure.update_layout(xaxis_title="日付", yaxis_title="株価")
 		st.plotly_chart(figure, use_container_width=True)
+
+st.header("Google Trends検索トレンド")
+keyword = st.text_input("検索キーワード", value=selected_name).strip()
+trend_periods = {
+		"過去12ヶ月": "today 12-m",
+		"過去5年": "today 5-y",
+	}
+selected_period = st.selectbox("検索期間", trend_periods)
+
+if not keyword:
+	st.warning("検索キーワードを入力してください。")
+else:
+	try:
+		trend_data = get_google_trends(keyword, trend_periods[selected_period])
+		if trend_data.empty:
+			st.warning("Google Trendsのデータを取得できませんでした。")
+		else:
+			trend_figure = px.line(
+				trend_data,
+				x="date",
+				y="search_index",
+				title=f"Google Trends - {keyword}",
+			)
+			trend_figure.update_layout(xaxis_title="日付", yaxis_title="検索指数")
+			st.plotly_chart(trend_figure, use_container_width=True)
+	except Exception as error:
+		st.error(f"Google Trendsデータの取得中に通信エラーが発生しました: {error}")
