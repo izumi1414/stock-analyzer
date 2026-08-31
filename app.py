@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from pytrends.request import TrendReq
 import yfinance as yf
+from src.prediction import train_and_evaluate
 
 
 def get_google_trends(keyword: str, timeframe: str) -> pd.DataFrame:
@@ -101,6 +102,51 @@ else:
 		)
 		figure.update_layout(xaxis_title="日付", yaxis_title="株価")
 		st.plotly_chart(figure, use_container_width=True)
+
+		st.subheader("株価予測")
+		try:
+			prediction_result = train_and_evaluate(data)
+			predicted_price = prediction_result.next_close_prediction
+			prediction_change = (predicted_price - current_price) / current_price * 100
+			prediction_summary = st.columns(3)
+			prediction_summary[0].metric("最新の実際の株価", f"{close.iloc[-1]:,.2f}")
+			prediction_summary[1].metric(
+				"翌日の予測株価", f"{predicted_price:,.2f}"
+			)
+			prediction_summary[2].metric("予測騰落率", f"{prediction_change:+.2f}%")
+			if predicted_price > current_price:
+				st.success("上昇予測")
+			elif predicted_price < current_price:
+				st.warning("下落予測")
+			else:
+				st.info("横ばい予測")
+			st.caption("この予測は過去の株価データを機械学習した結果であり、将来の株価を保証するものではありません。")
+
+			prediction_columns = st.columns(3)
+			prediction_columns[0].metric("MAE", f"{prediction_result.metrics['MAE']:,.2f}")
+			prediction_columns[1].metric("RMSE", f"{prediction_result.metrics['RMSE']:,.2f}")
+			prediction_columns[2].metric("R²", f"{prediction_result.metrics['R2']:.2f}")
+
+			comparison_data = pd.concat(
+				[
+					prediction_result.actual_values.rename("Actual Close"),
+					prediction_result.predicted_values.rename("Predicted Close"),
+				],
+				axis=1,
+			).dropna()
+			if comparison_data.empty:
+				st.error("実測値と予測値を比較するためのデータがありません。")
+			else:
+				prediction_figure = px.line(
+					comparison_data,
+					x=comparison_data.index,
+					y=["Actual Close", "Predicted Close"],
+					title="実測値と予測値の比較",
+				)
+				prediction_figure.update_layout(xaxis_title="日付", yaxis_title="株価")
+				st.plotly_chart(prediction_figure, use_container_width=True)
+		except ValueError as error:
+			st.error(str(error))
 
 st.header("Google Trends検索トレンド")
 keyword = st.text_input("検索キーワード", value=selected_name).strip()
