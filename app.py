@@ -1,9 +1,11 @@
+from datetime import timedelta
+
 import plotly.express as px
 import pandas as pd
 import streamlit as st
 from pytrends.request import TrendReq
 import yfinance as yf
-from src.prediction import train_and_evaluate
+from src.prediction import run_backtest, train_and_evaluate
 
 
 def get_google_trends(keyword: str, timeframe: str) -> pd.DataFrame:
@@ -145,6 +147,52 @@ else:
 				)
 				prediction_figure.update_layout(xaxis_title="日付", yaxis_title="株価")
 				st.plotly_chart(prediction_figure, use_container_width=True)
+		except ValueError as error:
+			st.error(str(error))
+
+		st.subheader("バックテスト結果")
+		available_start = close.index.min().date()
+		available_end = close.index[-2].date()
+		default_start = max(available_start, available_end - timedelta(days=90))
+		backtest_start = st.date_input(
+			"バックテスト開始日",
+			value=default_start,
+			min_value=available_start,
+			max_value=available_end,
+		)
+		backtest_end = st.date_input(
+			"バックテスト終了日",
+			value=available_end,
+			min_value=available_start,
+			max_value=available_end,
+		)
+
+		try:
+			backtest_result = run_backtest(
+				data,
+				pd.Timestamp(backtest_start),
+				pd.Timestamp(backtest_end),
+			)
+			backtest_columns = st.columns(3)
+			backtest_columns[0].metric("MAE", f"{backtest_result.metrics['MAE']:,.2f}")
+			backtest_columns[1].metric("RMSE", f"{backtest_result.metrics['RMSE']:,.2f}")
+			backtest_columns[2].metric(
+				"Directional Accuracy",
+				f"{backtest_result.metrics['Directional Accuracy']:.2%}",
+			)
+
+			backtest_figure = px.line(
+				backtest_result.results,
+				x="date",
+				y=["actual_value", "predicted_value"],
+				title="実績株価 vs 予測株価",
+				labels={
+					"actual_value": "Actual Close",
+					"predicted_value": "Predicted Close",
+				},
+			)
+			backtest_figure.update_layout(xaxis_title="日付", yaxis_title="株価")
+			st.plotly_chart(backtest_figure, use_container_width=True)
 		except ValueError as error:
 			st.error(str(error))
 
