@@ -19,6 +19,18 @@ def get_google_trends(keyword: str, timeframe: str) -> pd.DataFrame:
 	return trend_data[["date", "search_index"]].dropna()
 
 
+def get_correlation_interpretation(correlation: float) -> str:
+	if correlation >= 0.7:
+		return "強い正の相関があります。"
+	if correlation >= 0.3:
+		return "中程度の正の相関があります。"
+	if correlation > -0.3:
+		return "相関が弱いです。"
+	if correlation > -0.7:
+		return "中程度の負の相関があります。"
+	return "強い負の相関があります。"
+
+
 stocks = {
 	"Apple": "AAPL",
 	"Microsoft": "MSFT",
@@ -114,5 +126,30 @@ else:
 			)
 			trend_figure.update_layout(xaxis_title="日付", yaxis_title="検索指数")
 			st.plotly_chart(trend_figure, use_container_width=True)
+
+			if not data.empty and len(close) >= 2:
+				stock_weekly = close.resample("W").last().rename("stock_price").reset_index()
+				stock_weekly["date_key"] = pd.to_datetime(stock_weekly.iloc[:, 0]).dt.date
+				trend_data = trend_data.copy()
+				trend_data["date_key"] = trend_data["date"].dt.date
+				correlation_data = pd.merge(
+					stock_weekly[["date_key", "stock_price"]],
+					trend_data[["date_key", "search_index"]],
+					on="date_key",
+					how="inner",
+				).dropna()
+
+				st.subheader("Google Trends × 株価 相関分析")
+				if len(correlation_data) < 2:
+					st.error("相関係数を計算するためのデータが不足しています。")
+				else:
+					correlation = correlation_data["stock_price"].corr(
+						correlation_data["search_index"], method="pearson"
+					)
+					if pd.isna(correlation):
+						st.error("相関係数を計算できませんでした。")
+					else:
+						st.metric("相関係数", f"{correlation:.2f}")
+						st.write(get_correlation_interpretation(correlation))
 	except Exception as error:
 		st.error(f"Google Trendsデータの取得中に通信エラーが発生しました: {error}")
