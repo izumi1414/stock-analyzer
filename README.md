@@ -23,6 +23,7 @@ yfinanceから取得した株価データとGoogle Trendsの検索トレンド�
 - 株価とGoogle Trendsの相関分析
 - 売上高、営業利益、純利益、EPSなどの決算情報表示
 - 決算情報の推移表とPlotlyによる可視化
+- 決算情報から成長率・利益率・EPS成長率などの機械学習用特徴量を生成
 - LinearRegressionによる翌日の終値予測
 - MAE、RMSE、R²による予測評価
 - 時系列バックテストとDirectional Accuracyの表示
