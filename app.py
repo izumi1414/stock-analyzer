@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 from pytrends.request import TrendReq
 import yfinance as yf
+from src.financials import FINANCIAL_COLUMNS, get_financial_data
 from src.prediction import run_backtest, train_and_evaluate
 
 
@@ -47,6 +48,47 @@ stocks = {
 selected_name = st.selectbox("銘柄を選択", stocks)
 selected_ticker = stocks[selected_name]
 st.title(f"{selected_name} 株価分析")
+
+
+def show_financials(ticker_symbol: str) -> None:
+	st.header("決算情報")
+	try:
+		financial_data = get_financial_data(yf.Ticker(ticker_symbol))
+	except Exception as error:
+		st.warning(f"決算情報を取得できませんでした: {error}")
+		return
+
+	if financial_data.empty:
+		st.info("決算情報が取得できませんでした。")
+		return
+
+	display_data = financial_data.copy()
+	display_data["決算期"] = display_data["決算期"].dt.strftime("%Y-%m-%d")
+	for column in FINANCIAL_COLUMNS:
+		display_data[column] = display_data[column].map(
+			lambda value: "-" if pd.isna(value) else f"{value:,.2f}"
+		)
+	st.dataframe(display_data, use_container_width=True, hide_index=True)
+
+	chart_columns = ["売上高", "営業利益", "純利益"]
+	chart_data = financial_data[["決算期", *chart_columns]].dropna(
+		how="all", subset=chart_columns
+	)
+	if chart_data.empty:
+		st.info("推移をグラフ表示できる財務データがありません。")
+		return
+	figure = px.line(
+		chart_data,
+		x="決算期",
+		y=[column for column in chart_columns if chart_data[column].notna().any()],
+		title=f"{selected_name} 決算情報の推移",
+		markers=True,
+	)
+	figure.update_layout(xaxis_title="決算期", yaxis_title="金額")
+	st.plotly_chart(figure, use_container_width=True)
+
+
+show_financials(selected_ticker)
 
 data = yf.download(selected_ticker, period="2y", auto_adjust=False)
 

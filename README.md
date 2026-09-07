@@ -21,6 +21,8 @@ yfinanceから取得した株価データとGoogle Trendsの検索トレンド�
 - 20日、50日、200日移動平均線の表示
 - Google Trends検索トレンドの可視化
 - 株価とGoogle Trendsの相関分析
+- 売上高、営業利益、純利益、EPSなどの決算情報表示
+- 決算情報の推移表とPlotlyによる可視化
 - LinearRegressionによる翌日の終値予測
 - MAE、RMSE、R²による予測評価
 - 時系列バックテストとDirectional Accuracyの表示
